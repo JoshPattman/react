@@ -1,0 +1,137 @@
+package react
+
+import (
+	"encoding/json"
+	"io"
+)
+
+type messageKind string
+
+const (
+	kindSystem         messageKind = "system"
+	kindUser           messageKind = "user"
+	kindAgent          messageKind = "agent"
+	kindToolCalls      messageKind = "tool_calls"
+	kindToolResponse   messageKind = "tool_response"
+	kindNotification   messageKind = "notification"
+	kindPromptFragment messageKind = "prompt_fragment"
+	kindAvailableTools messageKind = "availalbe_tools"
+)
+
+// EncodeMessages into a json format on the writer.
+func EncodeMessages(w io.Writer, messages []Message) error {
+	dtos := make([]messageDTO, len(messages))
+	for i, m := range messages {
+		dtos[i] = messageToDTO(m)
+	}
+	return json.NewEncoder(w).Encode(dtos)
+}
+
+// DecodeMessages from the json format (from EncodeMessages) on the writer.
+func DecodeMessages(r io.Reader) ([]Message, error) {
+	var dtos []messageDTO
+	if err := json.NewDecoder(r).Decode(&dtos); err != nil {
+		return nil, err
+	}
+
+	msgs := make([]Message, len(dtos))
+	for i, d := range dtos {
+		msgs[i] = dtoToMessage(d)
+	}
+	return msgs, nil
+}
+
+type messageDTO struct {
+	Kind messageKind `json:"kind"`
+
+	Content   string `json:"content,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
+
+	ToolCalls []ToolCall     `json:"tool_calls,omitempty"`
+	Responses []ToolResponse `json:"responses,omitempty"`
+
+	PromptFragments []PromptFragment          `json:"prompt_fragments,omitempty"`
+	AvailableTools  []AvailableToolDefinition `json:"available_tools,omitempty"`
+}
+
+func messageToDTO(m Message) messageDTO {
+	switch v := m.(type) {
+	case SystemMessage:
+		return messageDTO{
+			Kind:    kindSystem,
+			Content: v.Content,
+		}
+
+	case UserMessage:
+		return messageDTO{
+			Kind:    kindUser,
+			Content: v.Content,
+		}
+
+	case AgentMessage:
+		return messageDTO{
+			Kind:    kindAgent,
+			Content: v.Content,
+		}
+
+	case ToolCallsMessage:
+		return messageDTO{
+			Kind:      kindToolCalls,
+			Reasoning: v.Reasoning,
+			ToolCalls: v.ToolCalls,
+		}
+
+	case ToolResponseMessage:
+		return messageDTO{
+			Kind:      kindToolResponse,
+			Responses: v.Responses,
+		}
+
+	case NotificationMessage:
+		return messageDTO{
+			Kind:    kindNotification,
+			Content: v.Content,
+		}
+	case PromptFragmentMessage:
+		return messageDTO{
+			Kind:            kindPromptFragment,
+			PromptFragments: v.Fragments,
+		}
+	case AvailableToolDefinitionsMessage:
+		return messageDTO{
+			Kind:           kindPromptFragment,
+			AvailableTools: v.Tools,
+		}
+
+	default:
+		panic("unknown Message type")
+	}
+}
+
+func dtoToMessage(d messageDTO) Message {
+	switch d.Kind {
+	case kindSystem:
+		return SystemMessage{Content: d.Content}
+	case kindUser:
+		return UserMessage{Content: d.Content}
+	case kindAgent:
+		return AgentMessage{Content: d.Content}
+	case kindToolCalls:
+		return ToolCallsMessage{
+			Reasoning: d.Reasoning,
+			ToolCalls: d.ToolCalls,
+		}
+	case kindToolResponse:
+		return ToolResponseMessage{
+			Responses: d.Responses,
+		}
+	case kindNotification:
+		return NotificationMessage{Content: d.Content}
+	case kindPromptFragment:
+		return PromptFragmentMessage{Fragments: d.PromptFragments}
+	case kindAvailableTools:
+		return AvailableToolDefinitionsMessage{Tools: d.AvailableTools}
+	default:
+		panic("unknown message kind")
+	}
+}
