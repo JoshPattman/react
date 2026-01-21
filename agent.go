@@ -43,7 +43,11 @@ func WithResponseStreamer(streamer TextStreamer) SendMessageOpt {
 	}
 }
 
+// Somthing capable of building models for agents to use
 type ModelBuilder interface {
+	// Build a model for the agent.
+	// A struct may be passed as the response type for a json schema, or it may be nil.
+	// The stream callbacks may also be nil.
 	BuildAgentModel(responseType any, onInitFinalStream func(), onDataFinalStream func(string)) jpf.Model
 }
 

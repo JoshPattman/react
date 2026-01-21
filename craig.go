@@ -19,30 +19,67 @@ import (
 var craigSystemPrompt string
 
 // Create a new CRAIG agent with the given tools.
-func NewCraig(mb ModelBuilder, tools []Tool) Agent {
-	return NewCraigFromSaved(mb, tools, []Message{
+func NewCraig(mb ModelBuilder, opts ...CraigOpt) Agent {
+	kwargs := getCraigKwargs(opts)
+	messages := []Message{
 		SystemMessage{
-			Content: createCraigSystemMessage(),
+			Content: createCraigSystemMessage(kwargs.personality),
 		},
-	})
+	}
+	return newCraigHelper(mb, messages, kwargs)
 }
 
 // Create a new CRAIG agent from the given state (from a previous CRAIG agent).
 // The tools provided should match the tools originally provided to NewCraig (in schema).
-func NewCraigFromSaved(mb ModelBuilder, tools []Tool, messages []Message) Agent {
+func NewCraigFromSaved(mb ModelBuilder, messages []Message, opts ...CraigOpt) Agent {
+	return newCraigHelper(mb, messages, getCraigKwargs(opts))
+}
+
+func getCraigKwargs(opts []CraigOpt) craigKwargs {
+	kwargs := craigKwargs{
+		personality: "Your name is CRAIG, a helpful assistant.",
+	}
+	for _, o := range opts {
+		o(&kwargs)
+	}
+	return kwargs
+}
+
+func newCraigHelper(mb ModelBuilder, messages []Message, kwargs craigKwargs) Agent {
+
 	ag := &craig{
 		messages:         messages,
 		modelBuilder:     mb,
-		tools:            tools,
+		tools:            kwargs.tools,
+		allFragments:     kwargs.fragments,
 		fragmentSelector: NewNoFragmentSelector(),
 	}
 	return ag
 }
 
-func createCraigSystemMessage() string {
+type CraigOpt func(*craigKwargs)
+
+func WithCraigFragments(frags ...PromptFragment) func(kw *craigKwargs) {
+	return func(kw *craigKwargs) { kw.fragments = append(kw.fragments, frags...) }
+}
+
+func WithCraigTools(tools ...Tool) func(kw *craigKwargs) {
+	return func(kw *craigKwargs) { kw.tools = append(kw.tools, tools...) }
+}
+
+func WithCraigPersonality(personality string) func(kw *craigKwargs) {
+	return func(kw *craigKwargs) { kw.personality = personality }
+}
+
+type craigKwargs struct {
+	fragments   []PromptFragment
+	tools       []Tool
+	personality string
+}
+
+func createCraigSystemMessage(personality string) string {
 	tmp := template.Must(template.New("system").Parse(craigSystemPrompt))
 	result := bytes.NewBuffer(nil)
-	personality := "Your name is CRAIG, a helpful journalling assistant."
 	err := tmp.Execute(result, struct {
 		Personality string
 	}{personality})
