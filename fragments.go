@@ -3,6 +3,7 @@ package react
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/JoshPattman/jpf"
@@ -14,14 +15,15 @@ type FragmentSelector interface {
 	SelectFragments([]PromptFragment, []Message) ([]PromptFragment, error)
 }
 
-// Create a frament selector that never selects any fragments.
-func NewNoFragmentSelector() FragmentSelector {
-	return &noFragmentSelector{}
-}
-
-// Create a fragment selector that asks an llm which fragments are relevant.
-func NewLLMFragmentSelector(modelBuilder FragmentSelectorModelBuilder) FragmentSelector {
-	return &llmFragmentSelector{modelBuilder}
+func NewFragmentSelector(modelBuilder FragmentSelectorModelBuilder, dontRepeatN int) FragmentSelector {
+	if modelBuilder == nil {
+		return &noFragmentSelector{}
+	}
+	var selec FragmentSelector = &llmFragmentSelector{modelBuilder}
+	if dontRepeatN > 0 {
+		selec = &dontRepeatInNFragmentSelector{dontRepeatN, selec}
+	}
+	return selec
 }
 
 type noFragmentSelector struct{}
@@ -44,6 +46,7 @@ type llmFragmentSelectorOutput struct {
 }
 
 func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, messages []Message) ([]PromptFragment, error) {
+	fmt.Println("Options", frags)
 	model := selector.modelBuilder.BuildFragmentSelectorModel(llmFragmentSelectorOutput{})
 	encoder := selector
 	decoder := jpf.NewJsonResponseDecoder[llmFragmentSelectorInput, llmFragmentSelectorOutput]()
@@ -64,6 +67,7 @@ func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, mes
 		}
 		relevantFrags = append(relevantFrags, frag)
 	}
+	fmt.Println("Choices", relevantFrags)
 	return relevantFrags, nil
 }
 
@@ -107,4 +111,23 @@ func (selector *llmFragmentSelector) BuildInputMessages(input llmFragmentSelecto
 			Content: userPrompt,
 		},
 	}, nil
+}
+
+type dontRepeatInNFragmentSelector struct {
+	n        int
+	selector FragmentSelector
+}
+
+func (selector *dontRepeatInNFragmentSelector) SelectFragments(frags []PromptFragment, messages []Message) ([]PromptFragment, error) {
+	allowedSelectFrags := slices.Clone(frags)
+	for i := len(messages) - 1; i >= 0 && len(messages)-1-i < selector.n; i-- {
+		msg, ok := messages[i].(PromptFragmentMessage)
+		if !ok {
+			continue
+		}
+		for _, f := range msg.Fragments {
+			allowedSelectFrags = slices.DeleteFunc(allowedSelectFrags, func(x PromptFragment) bool { return x == f })
+		}
+	}
+	return selector.selector.SelectFragments(allowedSelectFrags, messages)
 }

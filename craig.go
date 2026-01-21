@@ -52,7 +52,7 @@ func newCraigHelper(mb ModelBuilder, messages []Message, kwargs craigKwargs) Age
 		modelBuilder:     mb,
 		tools:            kwargs.tools,
 		allFragments:     kwargs.fragments,
-		fragmentSelector: NewLLMFragmentSelector(mb),
+		fragmentSelector: NewFragmentSelector(mb, 10),
 	}
 	return ag
 }
