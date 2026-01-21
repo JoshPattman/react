@@ -46,7 +46,6 @@ type llmFragmentSelectorOutput struct {
 }
 
 func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, messages []Message) ([]PromptFragment, error) {
-	fmt.Println("Options", frags)
 	model := selector.modelBuilder.BuildFragmentSelectorModel(llmFragmentSelectorOutput{})
 	encoder := selector
 	decoder := jpf.NewJsonResponseDecoder[llmFragmentSelectorInput, llmFragmentSelectorOutput]()
@@ -67,7 +66,6 @@ func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, mes
 		}
 		relevantFrags = append(relevantFrags, frag)
 	}
-	fmt.Println("Choices", relevantFrags)
 	return relevantFrags, nil
 }
 
