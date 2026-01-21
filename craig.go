@@ -52,7 +52,7 @@ func newCraigHelper(mb ModelBuilder, messages []Message, kwargs craigKwargs) Age
 		modelBuilder:     mb,
 		tools:            kwargs.tools,
 		allFragments:     kwargs.fragments,
-		fragmentSelector: NewNoFragmentSelector(),
+		fragmentSelector: NewLLMFragmentSelector(mb),
 	}
 	return ag
 }
@@ -91,7 +91,7 @@ func createCraigSystemMessage(personality string) string {
 
 type craig struct {
 	messages         []Message
-	modelBuilder     ModelBuilder
+	modelBuilder     AgentModelBuilder
 	tools            []Tool
 	fragmentSelector FragmentSelector
 	allFragments     []PromptFragment
@@ -115,12 +115,14 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 	)
 
 	// Add any relevant fragments
-	fragments, err := ag.fragmentSelector.SelectFragments(ag.allFragments, ag.messages)
-	if err != nil {
-		return "", err
-	}
-	if len(fragments) > 0 {
-		ag.addMessages(streamers, PromptFragmentMessage{fragments})
+	if len(ag.allFragments) > 0 {
+		fragments, err := ag.fragmentSelector.SelectFragments(ag.allFragments, ag.messages)
+		if err != nil {
+			return "", err
+		}
+		if len(fragments) > 0 {
+			ag.addMessages(streamers, PromptFragmentMessage{fragments})
+		}
 	}
 
 	// React loop
@@ -314,44 +316,6 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 		result = append(result, resultMsg)
 	}
 	return result, nil
-}
-
-func getToolDefs(tools []Tool) []AvailableToolDefinition {
-	defs := make([]AvailableToolDefinition, len(tools))
-	for i, t := range tools {
-		defs[i] = AvailableToolDefinition{
-			Name:        t.Name(),
-			Description: t.Description(),
-		}
-	}
-	return defs
-}
-
-func toolsHaveChanged(history []Message, tools []Tool) bool {
-	var lastToolMessage *AvailableToolDefinitionsMessage
-	for _, h := range history {
-		h, ok := h.(AvailableToolDefinitionsMessage)
-		if !ok {
-			continue
-		}
-		lastToolMessage = &h
-	}
-	if lastToolMessage == nil {
-		return true
-	}
-	newToolNames := make([]string, len(tools))
-	for i, t := range tools {
-		newToolNames[i] = t.Name()
-	}
-	if len(newToolNames) != len(lastToolMessage.Tools) {
-		return true
-	}
-	for _, t := range lastToolMessage.Tools {
-		if !slices.Contains(newToolNames, t.Name) {
-			return true
-		}
-	}
-	return false
 }
 
 type toolArg struct {

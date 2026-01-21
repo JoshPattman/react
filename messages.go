@@ -54,6 +54,7 @@ type AvailableToolDefinition struct {
 
 type PromptFragment struct {
 	Key     string
+	When    string
 	Content string
 }
 
