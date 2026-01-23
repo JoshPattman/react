@@ -15,7 +15,8 @@ const (
 	kindToolResponse   messageKind = "tool_response"
 	kindNotification   messageKind = "notification"
 	kindPromptFragment messageKind = "prompt_fragment"
-	kindAvailableTools messageKind = "availalbe_tools"
+	kindAvailableTools messageKind = "available_tools"
+	kindModeSwitch     messageKind = "mode_switch"
 )
 
 // EncodeMessages into a json format on the writer.
@@ -44,14 +45,16 @@ func DecodeMessages(r io.Reader) ([]Message, error) {
 type messageDTO struct {
 	Kind messageKind `json:"kind"`
 
-	Content   string `json:"content,omitempty"`
-	Reasoning string `json:"reasoning,omitempty"`
+	Content          string `json:"content,omitempty"`
+	Reasoning        string `json:"reasoning,omitempty"`
+	NotificationKind string `json:"notification_kind,omitempty"`
 
 	ToolCalls []ToolCall     `json:"tool_calls,omitempty"`
 	Responses []ToolResponse `json:"responses,omitempty"`
 
 	PromptFragments []PromptFragment          `json:"prompt_fragments,omitempty"`
 	AvailableTools  []AvailableToolDefinition `json:"available_tools,omitempty"`
+	Mode            AgentMode                 `json:"mode,omitempty"`
 }
 
 func messageToDTO(m Message) messageDTO {
@@ -89,8 +92,9 @@ func messageToDTO(m Message) messageDTO {
 
 	case NotificationMessage:
 		return messageDTO{
-			Kind:    kindNotification,
-			Content: v.Content,
+			Kind:             kindNotification,
+			Content:          v.Content,
+			NotificationKind: v.Kind,
 		}
 	case PromptFragmentMessage:
 		return messageDTO{
@@ -101,6 +105,11 @@ func messageToDTO(m Message) messageDTO {
 		return messageDTO{
 			Kind:           kindPromptFragment,
 			AvailableTools: v.Tools,
+		}
+	case ModeSwitchMessage:
+		return messageDTO{
+			Kind: kindModeSwitch,
+			Mode: v.Mode,
 		}
 
 	default:
@@ -126,11 +135,13 @@ func dtoToMessage(d messageDTO) Message {
 			Responses: d.Responses,
 		}
 	case kindNotification:
-		return NotificationMessage{Content: d.Content}
+		return NotificationMessage{Content: d.Content, Kind: d.NotificationKind}
 	case kindPromptFragment:
 		return PromptFragmentMessage{Fragments: d.PromptFragments}
 	case kindAvailableTools:
 		return AvailableToolDefinitionsMessage{Tools: d.AvailableTools}
+	case kindModeSwitch:
+		return ModeSwitchMessage{Mode: d.Mode}
 	default:
 		panic("unknown message kind")
 	}

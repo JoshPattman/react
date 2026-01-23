@@ -107,15 +107,12 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 		})
 	}
 
-	// Add the initial user message and a message to put the agent into react mode
-	ag.addMessages(
-		streamers,
-		UserMessage{msg},
-		ag.reasoningModeMessage(),
-	)
+	// Add the initial user message
+	ag.addMessages(streamers, UserMessage{msg})
 
-	// Add any relevant fragments
+	// Signal we are collecting context and add any relevant fragments
 	if len(ag.allFragments) > 0 {
+		ag.addMessages(streamers, ModeSwitchMessage{ModeCollectContext})
 		fragments, err := ag.fragmentSelector.SelectFragments(ag.allFragments, ag.messages)
 		if err != nil {
 			return "", err
@@ -124,6 +121,8 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 			ag.addMessages(streamers, PromptFragmentMessage{fragments})
 		}
 	}
+
+	ag.addMessages(streamers, ModeSwitchMessage{ModeReasonAct})
 
 	// React loop
 	for {
@@ -142,7 +141,7 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 	}
 
 	// Set the agent to final answer mode and get the response
-	ag.addMessages(streamers, ag.answerModeMessage())
+	ag.addMessages(streamers, ModeSwitchMessage{ModeAnswerUser})
 	finalResp, err := ag.getFinalResponse(streamers)
 	if err != nil {
 		return "", err
@@ -195,18 +194,6 @@ func (ag *craig) findToolByName(toolName string) Tool {
 	return nil
 }
 
-func (ag *craig) reasoningModeMessage() Message {
-	return NotificationMessage{
-		Content: "You are now in reason-action mode. Use the reason-action json format when answering questions here. The user will not see the followin responses.",
-	}
-}
-
-func (ag *craig) answerModeMessage() Message {
-	return NotificationMessage{
-		Content: "You are now in final answer mode. Your full response will be show to the user. You can respond in any format.",
-	}
-}
-
 func (ag *craig) getToolCalls() (ToolCallsMessage, error) {
 	model := ag.modelBuilder.BuildAgentModel(reasonResponse{}, nil, nil)
 	enc := ag.getEncoder()
@@ -241,6 +228,7 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 	result := make([]jpf.Message, 0)
 	for _, msg := range msgs {
 		var resultMsg jpf.Message
+		var dontMessage bool
 		switch msg := msg.(type) {
 		case SystemMessage:
 			resultMsg = jpf.Message{
@@ -274,10 +262,26 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 				Role:    jpf.SystemRole,
 				Content: "Tool Responses:" + toolSep + strings.Join(results, toolSep),
 			}
+		case ModeSwitchMessage:
+			switch msg.Mode {
+			case ModeReasonAct:
+				resultMsg = jpf.Message{
+					Role:    jpf.SystemRole,
+					Content: "**Mode Change**\nYou are now in reason-action mode. Use the reason-action json format when answering questions here. The user will not see the followin responses.",
+				}
+			case ModeAnswerUser:
+				resultMsg = jpf.Message{
+					Role:    jpf.SystemRole,
+					Content: "**Mode Change**\nYou are now in final answer mode. Your full response will be show to the user. You can respond in any format.",
+				}
+			default:
+				// We don't notify the agent about other mode switches
+				dontMessage = true
+			}
 		case NotificationMessage:
 			resultMsg = jpf.Message{
 				Role:    jpf.SystemRole,
-				Content: "**Notification**\n" + msg.Content,
+				Content: fmt.Sprintf("**Notification of type '%s'**\n%s", msg.Kind, msg.Content),
 			}
 		case PromptFragmentMessage:
 			frags := make([]string, len(msg.Fragments))
@@ -313,7 +317,9 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 		default:
 			return nil, errors.New("unknown message type")
 		}
-		result = append(result, resultMsg)
+		if !dontMessage {
+			result = append(result, resultMsg)
+		}
 	}
 	return result, nil
 }

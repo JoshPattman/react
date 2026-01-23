@@ -13,6 +13,7 @@ func (ToolResponseMessage) message()             {}
 func (NotificationMessage) message()             {}
 func (PromptFragmentMessage) message()           {}
 func (AvailableToolDefinitionsMessage) message() {}
+func (ModeSwitchMessage) message()               {}
 
 type SystemMessage struct {
 	Content string
@@ -35,7 +36,12 @@ type ToolResponseMessage struct {
 	Responses []ToolResponse
 }
 
+type ModeSwitchMessage struct {
+	Mode AgentMode
+}
+
 type NotificationMessage struct {
+	Kind    string
 	Content string
 }
 
@@ -71,3 +77,11 @@ type ToolCall struct {
 type ToolResponse struct {
 	Response string
 }
+
+type AgentMode uint8
+
+const (
+	ModeCollectContext = iota
+	ModeReasonAct
+	ModeAnswerUser
+)
