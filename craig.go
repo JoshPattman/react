@@ -107,6 +107,11 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 		})
 	}
 
+	// Update notifications
+	for _, msg := range streamers.notifications {
+		ag.addMessages(streamers, msg)
+	}
+
 	// Add the initial user message
 	ag.addMessages(streamers, UserMessage{msg})
 

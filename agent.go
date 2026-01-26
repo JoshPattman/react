@@ -41,9 +41,16 @@ func WithResponseStreamer(streamer TextStreamer) SendMessageOpt {
 	}
 }
 
+func WithNotifications(notifications ...NotificationMessage) SendMessageOpt {
+	return func(s *streamers) {
+		s.notifications = append(s.notifications, notifications...)
+	}
+}
+
 type streamers struct {
 	msgStreamers  []MessageStreamer
 	respStreamers []TextStreamer
+	notifications []NotificationMessage
 }
 
 func getStreamers(opts []SendMessageOpt) streamers {
