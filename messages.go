@@ -59,10 +59,15 @@ type AvailableToolDefinition struct {
 }
 
 type PromptFragment struct {
-	Key     string
-	When    string
+	// A sensible snake_case key
+	Key string
+	// When should this be applied? If empty will always be applied.
+	When string
+	// The content that is not seen by the selector but is seen by the agent when chosen.
 	Content string
 }
+
+func (f PromptFragment) IsConditional() bool { return f.When != "" }
 
 type ToolCallArg struct {
 	ArgName  string

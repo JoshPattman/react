@@ -46,15 +46,27 @@ func getCraigKwargs(opts []CraigOpt) craigKwargs {
 }
 
 func newCraigHelper(mb ModelBuilder, messages []Message, kwargs craigKwargs) Agent {
-
+	dyn, pers := getDynamicAndPersistent(kwargs.fragments)
+	messages = append(messages, PromptFragmentMessage{pers})
 	ag := &craig{
 		messages:         messages,
 		modelBuilder:     mb,
 		tools:            kwargs.tools,
-		allFragments:     kwargs.fragments,
+		dynamicFragments: dyn,
 		fragmentSelector: NewFragmentSelector(mb, 10),
 	}
 	return ag
+}
+
+func getDynamicAndPersistent(fragments []PromptFragment) (dynamic, persistent []PromptFragment) {
+	for _, f := range fragments {
+		if !f.IsConditional() {
+			dynamic = append(dynamic, f)
+		} else {
+			persistent = append(persistent, f)
+		}
+	}
+	return dynamic, persistent
 }
 
 type CraigOpt func(*craigKwargs)
@@ -94,7 +106,7 @@ type craig struct {
 	modelBuilder     AgentModelBuilder
 	tools            []Tool
 	fragmentSelector FragmentSelector
-	allFragments     []PromptFragment
+	dynamicFragments []PromptFragment
 }
 
 func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
@@ -116,9 +128,9 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 	ag.addMessages(streamers, UserMessage{msg})
 
 	// Signal we are collecting context and add any relevant fragments
-	if len(ag.allFragments) > 0 {
+	if len(ag.dynamicFragments) > 0 {
 		ag.addMessages(streamers, ModeSwitchMessage{ModeCollectContext})
-		fragments, err := ag.fragmentSelector.SelectFragments(ag.allFragments, ag.messages)
+		fragments, err := ag.fragmentSelector.SelectFragments(ag.dynamicFragments, ag.messages)
 		if err != nil {
 			return "", err
 		}
