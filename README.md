@@ -3,7 +3,7 @@
 - This package implements a version of a ReAct agent in Go, with a few extra features.
 
 ## Features
-- **Backed by the power of [jpf](github.com/JoshPattman/jpf)**: The LLM handling is extremely robust and model-agnostic.
+- **Backed by the power of [jpf](https://github.com/JoshPattman/jpf)**: The LLM handling is extremely robust and model-agnostic.
 - **Easy to create custom tools**: To create a tool, you just need to implement a simple interface.
 - **Built-in dynamic skill retrieval**: Named `PromptFragment` in this package, you can add skills to the agent and they will be intelligently injected into its context when relevant.
 - **Supports Streaming**: You can inject callbacks for both streaming back the text of the final response, and streaming back messages as they are created.
