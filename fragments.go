@@ -48,8 +48,8 @@ type llmFragmentSelectorOutput struct {
 func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, messages []Message) ([]PromptFragment, error) {
 	model := selector.modelBuilder.BuildFragmentSelectorModel(llmFragmentSelectorOutput{})
 	encoder := selector
-	decoder := jpf.NewJsonResponseDecoder[llmFragmentSelectorInput, llmFragmentSelectorOutput]()
-	mf := jpf.NewOneShotMapFunc(encoder, decoder, model)
+	decoder := jpf.NewJsonParser[llmFragmentSelectorOutput]()
+	mf := jpf.NewOneShotPipeline(encoder, decoder, nil, model)
 	result, _, err := mf.Call(context.Background(), llmFragmentSelectorInput{frags, messages})
 	if err != nil {
 		return nil, err

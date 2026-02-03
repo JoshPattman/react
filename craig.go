@@ -214,8 +214,8 @@ func (ag *craig) findToolByName(toolName string) Tool {
 func (ag *craig) getToolCalls() (ToolCallsMessage, error) {
 	model := ag.modelBuilder.BuildAgentModel(reasonResponse{}, nil, nil)
 	enc := ag.getEncoder()
-	dec := jpf.NewJsonResponseDecoder[[]Message, reasonResponse]()
-	mf := jpf.NewOneShotMapFunc(enc, dec, model)
+	dec := jpf.NewJsonParser[reasonResponse]()
+	mf := jpf.NewOneShotPipeline(enc, dec, nil, model)
 	result, _, err := mf.Call(context.Background(), ag.messages)
 	if err != nil {
 		return ToolCallsMessage{}, err
@@ -226,8 +226,8 @@ func (ag *craig) getToolCalls() (ToolCallsMessage, error) {
 func (ag *craig) getFinalResponse(streamer TextStreamer) (string, error) {
 	model := ag.modelBuilder.BuildAgentModel(nil, nil, streamer.TrySendTextChunk)
 	enc := ag.getEncoder()
-	dec := jpf.NewRawStringResponseDecoder[[]Message]()
-	mf := jpf.NewOneShotMapFunc(enc, dec, model)
+	dec := jpf.NewStringParser()
+	mf := jpf.NewOneShotPipeline(enc, dec, nil, model)
 	result, _, err := mf.Call(context.Background(), ag.messages)
 	if err != nil {
 		return "", err
@@ -235,7 +235,7 @@ func (ag *craig) getFinalResponse(streamer TextStreamer) (string, error) {
 	return result, nil
 }
 
-func (ag *craig) getEncoder() jpf.MessageEncoder[[]Message] {
+func (ag *craig) getEncoder() jpf.Encoder[[]Message] {
 	return &messagesEncoder{}
 }
 
