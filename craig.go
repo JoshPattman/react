@@ -60,7 +60,7 @@ func newCraigHelper(mb ModelBuilder, messages []Message, kwargs craigKwargs) Age
 
 func getDynamicAndPersistent(fragments []Skill) (dynamic, persistent []Skill) {
 	for _, f := range fragments {
-		if !f.IsConditional() {
+		if f.IsConditional() {
 			dynamic = append(dynamic, f)
 		} else {
 			persistent = append(persistent, f)
