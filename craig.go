@@ -46,19 +46,19 @@ func getCraigKwargs(opts []CraigOpt) craigKwargs {
 }
 
 func newCraigHelper(mb ModelBuilder, messages []Message, kwargs craigKwargs) Agent {
-	dyn, pers := getDynamicAndPersistent(kwargs.fragments)
-	messages = append(messages, PromptFragmentMessage{pers})
+	dyn, pers := getDynamicAndPersistent(kwargs.skills)
+	messages = append(messages, SkillMessage{pers})
 	ag := &craig{
 		messages:         messages,
 		modelBuilder:     mb,
 		tools:            kwargs.tools,
 		dynamicFragments: dyn,
-		fragmentSelector: NewFragmentSelector(mb, 10),
+		fragmentSelector: NewSkillSelector(mb, 10),
 	}
 	return ag
 }
 
-func getDynamicAndPersistent(fragments []PromptFragment) (dynamic, persistent []PromptFragment) {
+func getDynamicAndPersistent(fragments []Skill) (dynamic, persistent []Skill) {
 	for _, f := range fragments {
 		if !f.IsConditional() {
 			dynamic = append(dynamic, f)
@@ -71,8 +71,8 @@ func getDynamicAndPersistent(fragments []PromptFragment) (dynamic, persistent []
 
 type CraigOpt func(*craigKwargs)
 
-func WithCraigFragments(frags ...PromptFragment) func(kw *craigKwargs) {
-	return func(kw *craigKwargs) { kw.fragments = append(kw.fragments, frags...) }
+func WithCraigSkills(skills ...Skill) func(kw *craigKwargs) {
+	return func(kw *craigKwargs) { kw.skills = append(kw.skills, skills...) }
 }
 
 func WithCraigTools(tools ...Tool) func(kw *craigKwargs) {
@@ -84,7 +84,7 @@ func WithCraigPersonality(personality string) func(kw *craigKwargs) {
 }
 
 type craigKwargs struct {
-	fragments   []PromptFragment
+	skills      []Skill
 	tools       []Tool
 	personality string
 }
@@ -105,8 +105,8 @@ type craig struct {
 	messages         []Message
 	modelBuilder     AgentModelBuilder
 	tools            []Tool
-	fragmentSelector FragmentSelector
-	dynamicFragments []PromptFragment
+	fragmentSelector SkillSelector
+	dynamicFragments []Skill
 }
 
 func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
@@ -114,7 +114,7 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 
 	// Update tool message if tools have changed
 	if toolsHaveChanged(ag.messages, ag.tools) {
-		ag.addMessages(streamers, AvailableToolDefinitionsMessage{
+		ag.addMessages(streamers, ToolsMessage{
 			Tools: getToolDefs(ag.tools),
 		})
 	}
@@ -130,12 +130,12 @@ func (ag *craig) Send(msg string, opts ...SendMessageOpt) (string, error) {
 	// Signal we are collecting context and add any relevant fragments
 	if len(ag.dynamicFragments) > 0 {
 		ag.addMessages(streamers, ModeSwitchMessage{ModeCollectContext})
-		fragments, err := ag.fragmentSelector.SelectFragments(ag.dynamicFragments, ag.messages)
+		fragments, err := ag.fragmentSelector.SelectSkills(ag.dynamicFragments, ag.messages)
 		if err != nil {
 			return "", err
 		}
 		if len(fragments) > 0 {
-			ag.addMessages(streamers, PromptFragmentMessage{fragments})
+			ag.addMessages(streamers, SkillMessage{fragments})
 		}
 	}
 
@@ -300,9 +300,9 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 				Role:    jpf.SystemRole,
 				Content: fmt.Sprintf("**Notification of type '%s'**\n%s", msg.Kind, msg.Content),
 			}
-		case PromptFragmentMessage:
-			frags := make([]string, len(msg.Fragments))
-			for i, r := range msg.Fragments {
+		case SkillMessage:
+			frags := make([]string, len(msg.Skills))
+			for i, r := range msg.Skills {
 				frags[i] = r.Content
 			}
 			sep := "\n\n"
@@ -310,7 +310,7 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 				Role:    jpf.SystemRole,
 				Content: "Below is some potentially useful information (some of this may not be relevant):" + sep + strings.Join(frags, sep),
 			}
-		case AvailableToolDefinitionsMessage:
+		case ToolsMessage:
 			if len(msg.Tools) == 0 {
 				resultMsg = jpf.Message{
 					Role:    jpf.SystemRole,

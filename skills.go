@@ -9,56 +9,56 @@ import (
 	"github.com/JoshPattman/jpf"
 )
 
-// FragmentSelector defines an object that can choose relevant fragments to a conversation.
-type FragmentSelector interface {
-	// Select any relevant fragments that should be added tp the conversation.
-	SelectFragments([]PromptFragment, []Message) ([]PromptFragment, error)
+// SkillSelector defines an object that can choose relevant [Skill]s to a conversation.
+type SkillSelector interface {
+	// Select any relevant [Skill]s that should be added to the conversation.
+	SelectSkills([]Skill, []Message) ([]Skill, error)
 }
 
-func NewFragmentSelector(modelBuilder FragmentSelectorModelBuilder, dontRepeatN int) FragmentSelector {
+func NewSkillSelector(modelBuilder FragmentSelectorModelBuilder, dontRepeatN int) SkillSelector {
 	if modelBuilder == nil {
-		return &noFragmentSelector{}
+		return &noSkillSelector{}
 	}
-	var selec FragmentSelector = &llmFragmentSelector{modelBuilder}
+	var selec SkillSelector = &conversationLLMSkillSelector{modelBuilder}
 	if dontRepeatN > 0 {
 		selec = &dontRepeatInNFragmentSelector{dontRepeatN, selec}
 	}
 	return selec
 }
 
-type noFragmentSelector struct{}
+type noSkillSelector struct{}
 
-func (*noFragmentSelector) SelectFragments([]PromptFragment, []Message) ([]PromptFragment, error) {
+func (*noSkillSelector) SelectSkills([]Skill, []Message) ([]Skill, error) {
 	return nil, nil
 }
 
-type llmFragmentSelector struct {
+type conversationLLMSkillSelector struct {
 	modelBuilder FragmentSelectorModelBuilder
 }
 
-type llmFragmentSelectorInput struct {
-	Frags    []PromptFragment
+type conversationLLMSkillSelectorInput struct {
+	Frags    []Skill
 	Messages []Message
 }
 
-type llmFragmentSelectorOutput struct {
+type conversationLLMSkillSelectorOutput struct {
 	RelevantFragmentIDs []string `json:"relevant_fragment_ids"`
 }
 
-func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, messages []Message) ([]PromptFragment, error) {
-	model := selector.modelBuilder.BuildFragmentSelectorModel(llmFragmentSelectorOutput{})
+func (selector *conversationLLMSkillSelector) SelectSkills(frags []Skill, messages []Message) ([]Skill, error) {
+	model := selector.modelBuilder.BuildFragmentSelectorModel(conversationLLMSkillSelectorOutput{})
 	encoder := selector
-	decoder := jpf.NewJsonParser[llmFragmentSelectorOutput]()
+	decoder := jpf.NewJsonParser[conversationLLMSkillSelectorOutput]()
 	mf := jpf.NewOneShotPipeline(encoder, decoder, nil, model)
-	result, _, err := mf.Call(context.Background(), llmFragmentSelectorInput{frags, messages})
+	result, _, err := mf.Call(context.Background(), conversationLLMSkillSelectorInput{frags, messages})
 	if err != nil {
 		return nil, err
 	}
-	fragLookup := make(map[string]PromptFragment)
+	fragLookup := make(map[string]Skill)
 	for _, f := range frags {
 		fragLookup[f.Key] = f
 	}
-	relevantFrags := make([]PromptFragment, 0)
+	relevantFrags := make([]Skill, 0)
 	for _, fragID := range result.RelevantFragmentIDs {
 		frag, ok := fragLookup[fragID]
 		if !ok {
@@ -69,7 +69,7 @@ func (selector *llmFragmentSelector) SelectFragments(frags []PromptFragment, mes
 	return relevantFrags, nil
 }
 
-func (selector *llmFragmentSelector) BuildInputMessages(input llmFragmentSelectorInput) ([]jpf.Message, error) {
+func (selector *conversationLLMSkillSelector) BuildInputMessages(input conversationLLMSkillSelectorInput) ([]jpf.Message, error) {
 	conv := make([]string, 0)
 	for _, msg := range input.Messages {
 		switch msg := msg.(type) {
@@ -113,19 +113,19 @@ func (selector *llmFragmentSelector) BuildInputMessages(input llmFragmentSelecto
 
 type dontRepeatInNFragmentSelector struct {
 	n        int
-	selector FragmentSelector
+	selector SkillSelector
 }
 
-func (selector *dontRepeatInNFragmentSelector) SelectFragments(frags []PromptFragment, messages []Message) ([]PromptFragment, error) {
+func (selector *dontRepeatInNFragmentSelector) SelectSkills(frags []Skill, messages []Message) ([]Skill, error) {
 	allowedSelectFrags := slices.Clone(frags)
 	for i := len(messages) - 1; i >= 0 && len(messages)-1-i < selector.n; i-- {
-		msg, ok := messages[i].(PromptFragmentMessage)
+		msg, ok := messages[i].(SkillMessage)
 		if !ok {
 			continue
 		}
-		for _, f := range msg.Fragments {
-			allowedSelectFrags = slices.DeleteFunc(allowedSelectFrags, func(x PromptFragment) bool { return x == f })
+		for _, f := range msg.Skills {
+			allowedSelectFrags = slices.DeleteFunc(allowedSelectFrags, func(x Skill) bool { return x == f })
 		}
 	}
-	return selector.selector.SelectFragments(allowedSelectFrags, messages)
+	return selector.selector.SelectSkills(allowedSelectFrags, messages)
 }

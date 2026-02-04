@@ -5,15 +5,15 @@ type Message interface {
 	message()
 }
 
-func (SystemMessage) message()                   {}
-func (UserMessage) message()                     {}
-func (AgentMessage) message()                    {}
-func (ToolCallsMessage) message()                {}
-func (ToolResponseMessage) message()             {}
-func (NotificationMessage) message()             {}
-func (PromptFragmentMessage) message()           {}
-func (AvailableToolDefinitionsMessage) message() {}
-func (ModeSwitchMessage) message()               {}
+func (SystemMessage) message()       {}
+func (UserMessage) message()         {}
+func (AgentMessage) message()        {}
+func (ToolCallsMessage) message()    {}
+func (ToolResponseMessage) message() {}
+func (NotificationMessage) message() {}
+func (SkillMessage) message()        {}
+func (ToolsMessage) message()        {}
+func (ModeSwitchMessage) message()   {}
 
 type SystemMessage struct {
 	Content string
@@ -45,11 +45,11 @@ type NotificationMessage struct {
 	Content string
 }
 
-type PromptFragmentMessage struct {
-	Fragments []PromptFragment
+type SkillMessage struct {
+	Skills []Skill
 }
 
-type AvailableToolDefinitionsMessage struct {
+type ToolsMessage struct {
 	Tools []AvailableToolDefinition
 }
 
@@ -58,7 +58,7 @@ type AvailableToolDefinition struct {
 	Description []string
 }
 
-type PromptFragment struct {
+type Skill struct {
 	// A sensible snake_case key
 	Key string
 	// When should this be applied? If empty will always be applied.
@@ -67,7 +67,7 @@ type PromptFragment struct {
 	Content string
 }
 
-func (f PromptFragment) IsConditional() bool { return f.When != "" }
+func (f Skill) IsConditional() bool { return f.When != "" }
 
 type ToolCallArg struct {
 	ArgName  string

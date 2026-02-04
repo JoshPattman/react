@@ -14,9 +14,9 @@ func getToolDefs(tools []Tool) []AvailableToolDefinition {
 }
 
 func toolsHaveChanged(history []Message, tools []Tool) bool {
-	var lastToolMessage *AvailableToolDefinitionsMessage
+	var lastToolMessage *ToolsMessage
 	for _, h := range history {
-		h, ok := h.(AvailableToolDefinitionsMessage)
+		h, ok := h.(ToolsMessage)
 		if !ok {
 			continue
 		}

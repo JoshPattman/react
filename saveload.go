@@ -14,7 +14,7 @@ const (
 	kindToolCalls      messageKind = "tool_calls"
 	kindToolResponse   messageKind = "tool_response"
 	kindNotification   messageKind = "notification"
-	kindPromptFragment messageKind = "prompt_fragment"
+	kindSkills         messageKind = "skills"
 	kindAvailableTools messageKind = "available_tools"
 	kindModeSwitch     messageKind = "mode_switch"
 )
@@ -52,9 +52,9 @@ type messageDTO struct {
 	ToolCalls []ToolCall     `json:"tool_calls,omitempty"`
 	Responses []ToolResponse `json:"responses,omitempty"`
 
-	PromptFragments []PromptFragment          `json:"prompt_fragments,omitempty"`
-	AvailableTools  []AvailableToolDefinition `json:"available_tools,omitempty"`
-	Mode            AgentMode                 `json:"mode,omitempty"`
+	Skills         []Skill                   `json:"skills,omitempty"`
+	AvailableTools []AvailableToolDefinition `json:"available_tools,omitempty"`
+	Mode           AgentMode                 `json:"mode,omitempty"`
 }
 
 func messageToDTO(m Message) messageDTO {
@@ -96,14 +96,14 @@ func messageToDTO(m Message) messageDTO {
 			Content:          v.Content,
 			NotificationKind: v.Kind,
 		}
-	case PromptFragmentMessage:
+	case SkillMessage:
 		return messageDTO{
-			Kind:            kindPromptFragment,
-			PromptFragments: v.Fragments,
+			Kind:   kindSkills,
+			Skills: v.Skills,
 		}
-	case AvailableToolDefinitionsMessage:
+	case ToolsMessage:
 		return messageDTO{
-			Kind:           kindPromptFragment,
+			Kind:           kindSkills,
 			AvailableTools: v.Tools,
 		}
 	case ModeSwitchMessage:
@@ -136,10 +136,10 @@ func dtoToMessage(d messageDTO) Message {
 		}
 	case kindNotification:
 		return NotificationMessage{Content: d.Content, Kind: d.NotificationKind}
-	case kindPromptFragment:
-		return PromptFragmentMessage{Fragments: d.PromptFragments}
+	case kindSkills:
+		return SkillMessage{Skills: d.Skills}
 	case kindAvailableTools:
-		return AvailableToolDefinitionsMessage{Tools: d.AvailableTools}
+		return ToolsMessage{Tools: d.AvailableTools}
 	case kindModeSwitch:
 		return ModeSwitchMessage{Mode: d.Mode}
 	default:
