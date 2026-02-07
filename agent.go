@@ -20,32 +20,25 @@ func (ag *Agent) Send(msg string, opts ...SendMessageOpt) (string, error) {
 	kwargs := getKwargs(opts)
 	streamers := kwargs.Streamers()
 
-	// Update tool message if tools have changed
-	if toolsHaveChanged(ag.messages, ag.tools) {
-		ag.addMessages(streamers, ToolsMessage{
-			Tools: getToolDefs(ag.tools),
-		})
-	}
-
 	// Update notifications
 	for _, msg := range kwargs.notifications {
-		ag.addMessages(streamers, msg)
+		ag.addMessages(streamers, notificationMessage{msg})
 	}
 
 	// Add the initial user message
-	ag.addMessages(streamers, UserMessage{msg})
+	ag.addMessages(streamers, userMessage{msg})
 
 	// Signal we are collecting context and add any relevant fragments
 	if len(ag.dynamicFragments) > 0 {
-		ag.addMessages(streamers, ModeSwitchMessage{ModeCollectContext})
+		ag.addMessages(streamers, modeSwitchMessage{ModeCollectContext})
 		nextSkills, err := ag.getNextSelectedSkills()
 		if err != nil {
 			return "", err
 		}
-		ag.addMessages(streamers, SkillMessage{nextSkills})
+		ag.addMessages(streamers, skillMessage{nextSkills})
 	}
 
-	ag.addMessages(streamers, ModeSwitchMessage{ModeReasonAct})
+	ag.addMessages(streamers, modeSwitchMessage{ModeReasonAct})
 
 	// React loop
 	for {
@@ -60,16 +53,16 @@ func (ag *Agent) Send(msg string, opts ...SendMessageOpt) (string, error) {
 		}
 		// Execute tool calls
 		toolResults := ag.executeToolCalls(toolCalls.ToolCalls)
-		ag.addMessages(streamers, ToolResponseMessage{toolResults})
+		ag.addMessages(streamers, toolResponseMessage{toolResults})
 	}
 
 	// Set the agent to final answer mode and get the response
-	ag.addMessages(streamers, ModeSwitchMessage{ModeAnswerUser})
+	ag.addMessages(streamers, modeSwitchMessage{ModeAnswerUser})
 	finalResp, err := ag.answerFinalResponse(streamers)
 	if err != nil {
 		return "", err
 	}
-	ag.addMessages(streamers, AgentMessage{finalResp})
+	ag.addMessages(streamers, agentMessage{finalResp})
 	return finalResp, nil
 }
 
@@ -98,12 +91,12 @@ func (ag *Agent) getNextSelectedSkills() ([]InsertedSkill, error) {
 	return append(skillsToPersist, skillsToInsert...), nil
 }
 
-func (ag *Agent) answerReAct() (ToolCallsMessage, error) {
+func (ag *Agent) answerReAct() (toolCallsMessage, error) {
 	model := ag.modelBuilder.BuildAgentModel(reasonResponse{}, nil, nil)
 	pipeline := getAgentReActPipeline(model)
 	result, _, err := pipeline.Call(context.Background(), ag.messages)
 	if err != nil {
-		return ToolCallsMessage{}, err
+		return toolCallsMessage{}, err
 	}
 	return toolCallsMessageFromResponse(result), nil
 }

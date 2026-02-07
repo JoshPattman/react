@@ -3,7 +3,6 @@ package react
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"strings"
@@ -55,107 +54,13 @@ type reasonResponse struct {
 type messagesEncoder struct{}
 
 func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, error) {
-	result := make([]jpf.Message, 0)
-	for _, msg := range msgs {
-		var resultMsg jpf.Message
-		var dontMessage bool
-		switch msg := msg.(type) {
-		case SystemMessage:
-			personality := getLastPersonality(msgs)
-			skills := getLastInsertedSkills(msgs)
-			prompt := executeSystemPrompt(msg.Template, systemPromptData{
-				personality,
-				skills,
-			})
-			resultMsg = jpf.Message{
-				Role:    jpf.SystemRole,
-				Content: prompt,
-			}
-		case UserMessage:
-			resultMsg = jpf.Message{
-				Role:    jpf.UserRole,
-				Content: msg.Content,
-			}
-		case AgentMessage:
-			resultMsg = jpf.Message{
-				Role:    jpf.AssistantRole,
-				Content: msg.Content,
-			}
-		case ToolCallsMessage:
-			resp := responseFromToolCallsMessage(msg)
-			content, _ := json.MarshalIndent(resp, "", "    ")
-			resultMsg = jpf.Message{
-				Role:    jpf.AssistantRole,
-				Content: string(content),
-			}
-		case ToolResponseMessage:
-			results := make([]string, len(msg.Responses))
-			for i, r := range msg.Responses {
-				results[i] = r.Response
-			}
-			toolSep := "\n==========\n"
-			resultMsg = jpf.Message{
-				Role:    jpf.SystemRole,
-				Content: "Tool Responses:" + toolSep + strings.Join(results, toolSep),
-			}
-		case ModeSwitchMessage:
-			switch msg.Mode {
-			case ModeReasonAct:
-				resultMsg = jpf.Message{
-					Role:    jpf.SystemRole,
-					Content: "**Mode Change**\nYou are now in reason-action mode. Use the reason-action json format when answering questions here. The user will not see the followin responses.",
-				}
-			case ModeAnswerUser:
-				resultMsg = jpf.Message{
-					Role:    jpf.SystemRole,
-					Content: "**Mode Change**\nYou are now in final answer mode. Your full response will be show to the user. You can respond in any format.",
-				}
-			default:
-				// We don't notify the agent about other mode switches
-				dontMessage = true
-			}
-		case NotificationMessage:
-			resultMsg = jpf.Message{
-				Role:    jpf.SystemRole,
-				Content: fmt.Sprintf("**Notification of type '%s'**\n%s", msg.Kind, msg.Content),
-			}
-		case SkillMessage:
-			dontMessage = true // Skills are handled by the system prompt
-		case PersonalityMessage:
-			dontMessage = true
-		case ToolsMessage:
-			if len(msg.Tools) == 0 {
-				resultMsg = jpf.Message{
-					Role:    jpf.SystemRole,
-					Content: "The available tools have changed, there are now no tools available.",
-				}
-			} else {
-				tools := make([]string, len(msg.Tools))
-				for i, t := range msg.Tools {
-					s := fmt.Sprintf("- Tool `%s`", t.Name)
-					for _, d := range t.Description {
-						s += fmt.Sprintf("\n  - %s", d)
-					}
-					tools[i] = s
-				}
-				resultMsg = jpf.Message{
-					Role:    jpf.SystemRole,
-					Content: "The available tools have changed, here are the current available tools:\n" + strings.Join(tools, "\n"),
-				}
-			}
-
-		default:
-			return nil, errors.New("unknown message type")
-		}
-		if !dontMessage {
-			result = append(result, resultMsg)
-		}
-	}
-	return result, nil
+	converter := &jpfMessageConverter{}
+	ConvertMessages(converter, msgs)
+	return converter.Messages(), nil
 }
 
-func toolCallsMessageFromResponse(response reasonResponse) ToolCallsMessage {
-	finalMessage := ToolCallsMessage{
+func toolCallsMessageFromResponse(response reasonResponse) toolCallsMessage {
+	finalMessage := toolCallsMessage{
 		Reasoning: response.Reasoning,
 	}
 	for _, tc := range response.ToolCalls {
@@ -171,11 +76,11 @@ func toolCallsMessageFromResponse(response reasonResponse) ToolCallsMessage {
 	return finalMessage
 }
 
-func responseFromToolCallsMessage(msg ToolCallsMessage) reasonResponse {
+func responseFromToolCallsMessage(reasoning string, calls []ToolCall) reasonResponse {
 	finalMessage := reasonResponse{
-		Reasoning: msg.Reasoning,
+		Reasoning: reasoning,
 	}
-	for _, tc := range msg.ToolCalls {
+	for _, tc := range calls {
 		args := make([]toolArg, 0)
 		for _, a := range tc.ToolArgs {
 			args = append(args, toolArg(a))
@@ -201,4 +106,112 @@ func executeSystemPrompt(temp string, data systemPromptData) string {
 		panic(err)
 	}
 	return result.String()
+}
+
+type jpfMessageConverter struct {
+	systemTemplate string
+	personality    string
+	skills         []InsertedSkill
+	activeMessages []jpf.Message
+}
+
+func (c *jpfMessageConverter) Messages() []jpf.Message {
+	prompt := executeSystemPrompt(c.systemTemplate, systemPromptData{
+		c.personality,
+		c.skills,
+	})
+	return []jpf.Message{
+		{
+			Role:    jpf.SystemRole,
+			Content: prompt,
+		},
+	}
+}
+
+func (conv *jpfMessageConverter) AddSystem(template string) {
+	conv.systemTemplate = template
+}
+func (conv *jpfMessageConverter) AddUser(content string) {
+	conv.activeMessages = append(conv.activeMessages, jpf.Message{
+		Role:    jpf.UserRole,
+		Content: content,
+	})
+}
+func (conv *jpfMessageConverter) AddAgent(content string) {
+	conv.activeMessages = append(conv.activeMessages, jpf.Message{
+		Role:    jpf.AssistantRole,
+		Content: content,
+	})
+}
+func (conv *jpfMessageConverter) AddToolCalls(reasoning string, toolCalls []ToolCall) {
+	resp := responseFromToolCallsMessage(reasoning, toolCalls)
+	content, _ := json.MarshalIndent(resp, "", "    ")
+	conv.activeMessages = append(conv.activeMessages, jpf.Message{
+		Role:    jpf.AssistantRole,
+		Content: string(content),
+	})
+}
+func (conv *jpfMessageConverter) AddToolResponse(responses []ToolResponse) {
+	results := make([]string, len(responses))
+	for i, r := range responses {
+		results[i] = r.Response
+	}
+	toolSep := "\n==========\n"
+	conv.activeMessages = append(conv.activeMessages, jpf.Message{
+		Role:    jpf.SystemRole,
+		Content: "Tool Responses:" + toolSep + strings.Join(results, toolSep),
+	})
+}
+func (conv *jpfMessageConverter) AddModeSwitch(mode AgentMode) {
+	var resultMsg jpf.Message
+	switch mode {
+	case ModeReasonAct:
+		resultMsg = jpf.Message{
+			Role:    jpf.SystemRole,
+			Content: "**Mode Change**\nYou are now in reason-action mode. Use the reason-action json format when answering questions here. The user will not see the followin responses.",
+		}
+	case ModeAnswerUser:
+		resultMsg = jpf.Message{
+			Role:    jpf.SystemRole,
+			Content: "**Mode Change**\nYou are now in final answer mode. Your full response will be show to the user. You can respond in any format.",
+		}
+	default:
+		return
+	}
+	conv.activeMessages = append(conv.activeMessages, resultMsg)
+}
+func (conv *jpfMessageConverter) AddNotification(kind string, content string) {
+	conv.activeMessages = append(conv.activeMessages, jpf.Message{
+		Role:    jpf.SystemRole,
+		Content: fmt.Sprintf("**Notification of type '%s'**\n%s", kind, content),
+	})
+}
+func (conv *jpfMessageConverter) AddPersonality(personality string) {
+	conv.personality = personality
+}
+func (conv *jpfMessageConverter) AddSkills(skills []InsertedSkill) {
+	conv.skills = skills
+}
+func (conv *jpfMessageConverter) AddToolDefs(defs []AvailableToolDefinition) {
+	var resultMsg jpf.Message
+	if len(defs) == 0 {
+		resultMsg = jpf.Message{
+			Role:    jpf.SystemRole,
+			Content: "The available tools have changed, there are now no tools available.",
+		}
+	} else {
+		tools := make([]string, len(defs))
+		for i, t := range defs {
+			s := fmt.Sprintf("- Tool `%s`", t.Name)
+			for _, d := range t.Description {
+				s += fmt.Sprintf("\n  - %s", d)
+			}
+			tools[i] = s
+		}
+		resultMsg = jpf.Message{
+			Role:    jpf.SystemRole,
+			Content: "The available tools have changed, here are the current available tools:\n" + strings.Join(tools, "\n"),
+		}
+	}
+	conv.activeMessages = append(conv.activeMessages, resultMsg)
 }

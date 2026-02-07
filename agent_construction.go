@@ -5,10 +5,10 @@ import _ "embed"
 func New(mb ModelBuilder, opts ...NewOpt) *Agent {
 	kwargs := getNewKwargs(opts)
 	messages := []Message{
-		PersonalityMessage{
+		personalityMessage{
 			kwargs.personality,
 		},
-		SystemMessage{
+		systemMessage{
 			Template: createCraigSystemTemplate(),
 		},
 	}
@@ -19,6 +19,32 @@ func NewFromSaved(mb ModelBuilder, messages []Message, opts ...NewOpt) *Agent {
 	return newHelper(mb, messages, getNewKwargs(opts))
 }
 
+func newHelper(mb ModelBuilder, messages []Message, kwargs newKwargs) *Agent {
+	// Add persistent skills by default forever
+	dyn, pers := getDynamicAndPersistent(kwargs.skills)
+	insertPersistentSkills := make([]InsertedSkill, len(pers))
+	for i, s := range pers {
+		insertPersistentSkills[i] = InsertedSkill{s, 999999999999999999}
+	}
+	messages = append(messages, skillMessage{insertPersistentSkills})
+
+	// Add tool definitions if the tools were changed since the last agent
+	if toolsHaveChanged(messages, kwargs.tools) {
+		messages = append(messages, toolsMessage{
+			getToolDefs(kwargs.tools),
+		})
+	}
+
+	// Build
+	ag := &Agent{
+		messages:         messages,
+		modelBuilder:     mb,
+		dynamicFragments: dyn,
+		skillSelector:    NewSkillSelector(mb),
+	}
+	return ag
+}
+
 func getNewKwargs(opts []NewOpt) newKwargs {
 	kwargs := newKwargs{
 		personality: "Your name is CRAIG, a helpful assistant.",
@@ -27,23 +53,6 @@ func getNewKwargs(opts []NewOpt) newKwargs {
 		o(&kwargs)
 	}
 	return kwargs
-}
-
-func newHelper(mb ModelBuilder, messages []Message, kwargs newKwargs) *Agent {
-	dyn, pers := getDynamicAndPersistent(kwargs.skills)
-	insertPersistentSkills := make([]InsertedSkill, len(pers))
-	for i, s := range pers {
-		insertPersistentSkills[i] = InsertedSkill{s, 999999999999999999}
-	}
-	messages = append(messages, SkillMessage{insertPersistentSkills})
-	ag := &Agent{
-		messages:         messages,
-		modelBuilder:     mb,
-		tools:            kwargs.tools,
-		dynamicFragments: dyn,
-		skillSelector:    NewSkillSelector(mb),
-	}
-	return ag
 }
 
 type NewOpt func(*newKwargs)

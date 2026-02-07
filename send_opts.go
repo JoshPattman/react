@@ -16,7 +16,7 @@ func WithResponseStreamer(streamer TextStreamer) SendMessageOpt {
 	}
 }
 
-func WithNotifications(notifications ...NotificationMessage) SendMessageOpt {
+func WithNotifications(notifications ...Notification) SendMessageOpt {
 	return func(s *sendMessageKwargs) {
 		s.notifications = append(s.notifications, notifications...)
 	}
@@ -25,7 +25,7 @@ func WithNotifications(notifications ...NotificationMessage) SendMessageOpt {
 type sendMessageKwargs struct {
 	msgStreamers  []MessageStreamer
 	respStreamers []TextStreamer
-	notifications []NotificationMessage
+	notifications []Notification
 }
 
 func getKwargs(opts []SendMessageOpt) sendMessageKwargs {

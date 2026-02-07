@@ -66,15 +66,9 @@ func (selector *conversationLLMSkillSelector) SelectSkills(frags []Skill, messag
 }
 
 func (selector *conversationLLMSkillSelector) BuildInputMessages(input conversationLLMSkillSelectorInput) ([]jpf.Message, error) {
-	conv := make([]string, 0)
-	for _, msg := range input.Messages {
-		switch msg := msg.(type) {
-		case UserMessage:
-			conv = append(conv, fmt.Sprintf("<user-message>%s</user-message>", msg.Content))
-		case AgentMessage:
-			conv = append(conv, fmt.Sprintf("<agent-message>%s</agent-message>", msg.Content))
-		}
-	}
+	enc := &xmlMessageConverter{}
+	ConvertMessages(enc, input.Messages)
+	conv := enc.lines
 	if len(conv) > 10 {
 		conv = conv[len(conv)-10:]
 	}
@@ -105,6 +99,19 @@ func (selector *conversationLLMSkillSelector) BuildInputMessages(input conversat
 			Content: userPrompt,
 		},
 	}, nil
+}
+
+// An encoder that converts user and assistant messages to xml lines
+type xmlMessageConverter struct {
+	BaseMessageConverter
+	lines []string
+}
+
+func (conv *xmlMessageConverter) AddUser(content string) {
+	conv.lines = append(conv.lines, fmt.Sprintf("<user-message>%s</user-message>", content))
+}
+func (conv *xmlMessageConverter) AddAgent(content string) {
+	conv.lines = append(conv.lines, fmt.Sprintf("<agent-message>%s</agent-message>", content))
 }
 
 func getDynamicAndPersistent(fragments []Skill) (dynamic, persistent []Skill) {

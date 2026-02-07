@@ -1,157 +1,151 @@
 package react
 
-import (
-	"encoding/json"
-	"io"
-)
-
-type messageKind string
+type SerialisedMessageKind string
 
 const (
-	kindSystem         messageKind = "system"
-	kindUser           messageKind = "user"
-	kindAgent          messageKind = "agent"
-	kindToolCalls      messageKind = "tool_calls"
-	kindToolResponse   messageKind = "tool_response"
-	kindNotification   messageKind = "notification"
-	kindSkills         messageKind = "skills"
-	kindAvailableTools messageKind = "available_tools"
-	kindModeSwitch     messageKind = "mode_switch"
-	kindPersonality    messageKind = "personality"
+	KindSystem         SerialisedMessageKind = "system"
+	KindUser           SerialisedMessageKind = "user"
+	KindAgent          SerialisedMessageKind = "agent"
+	KindToolCalls      SerialisedMessageKind = "tool_calls"
+	KindToolResponse   SerialisedMessageKind = "tool_response"
+	KindNotification   SerialisedMessageKind = "notification"
+	KindSkills         SerialisedMessageKind = "skills"
+	KindAvailableTools SerialisedMessageKind = "available_tools"
+	KindModeSwitch     SerialisedMessageKind = "mode_switch"
+	KindPersonality    SerialisedMessageKind = "personality"
 )
 
-// EncodeMessages into a json format on the writer.
-func EncodeMessages(w io.Writer, messages []Message) error {
-	dtos := make([]messageDTO, len(messages))
-	for i, m := range messages {
-		dtos[i] = messageToDTO(m)
-	}
-	return json.NewEncoder(w).Encode(dtos)
+type SerialisedMessage struct {
+	Kind             SerialisedMessageKind     `json:"kind"`
+	Content          string                    `json:"content,omitempty"`
+	Reasoning        string                    `json:"reasoning,omitempty"`
+	NotificationKind string                    `json:"notification_kind,omitempty"`
+	ToolCalls        []ToolCall                `json:"tool_calls,omitempty"`
+	Responses        []ToolResponse            `json:"responses,omitempty"`
+	Skills           []InsertedSkill           `json:"skills,omitempty"`
+	AvailableTools   []AvailableToolDefinition `json:"available_tools,omitempty"`
+	Mode             AgentMode                 `json:"mode,omitempty"`
+	Personality      string                    `json:"personality,omitempty"`
 }
 
-// DecodeMessages from the json format (from EncodeMessages) on the writer.
-func DecodeMessages(r io.Reader) ([]Message, error) {
-	var dtos []messageDTO
-	if err := json.NewDecoder(r).Decode(&dtos); err != nil {
-		return nil, err
-	}
-
-	msgs := make([]Message, len(dtos))
-	for i, d := range dtos {
-		msgs[i] = dtoToMessage(d)
-	}
-	return msgs, nil
+func SerialiseMessages(msgs []Message) []SerialisedMessage {
+	converter := &serialisingConverter{}
+	ConvertMessages(converter, msgs)
+	return converter.out
 }
 
-type messageDTO struct {
-	Kind messageKind `json:"kind"`
-
-	Content          string `json:"content,omitempty"`
-	Reasoning        string `json:"reasoning,omitempty"`
-	NotificationKind string `json:"notification_kind,omitempty"`
-
-	ToolCalls []ToolCall     `json:"tool_calls,omitempty"`
-	Responses []ToolResponse `json:"responses,omitempty"`
-
-	Skills         []InsertedSkill           `json:"skills,omitempty"`
-	AvailableTools []AvailableToolDefinition `json:"available_tools,omitempty"`
-	Mode           AgentMode                 `json:"mode,omitempty"`
-	Personality    string                    `json:"personality,omitempty"`
-}
-
-func messageToDTO(m Message) messageDTO {
-	switch v := m.(type) {
-	case SystemMessage:
-		return messageDTO{
-			Kind:    kindSystem,
-			Content: v.Template,
-		}
-
-	case UserMessage:
-		return messageDTO{
-			Kind:    kindUser,
-			Content: v.Content,
-		}
-
-	case AgentMessage:
-		return messageDTO{
-			Kind:    kindAgent,
-			Content: v.Content,
-		}
-
-	case ToolCallsMessage:
-		return messageDTO{
-			Kind:      kindToolCalls,
-			Reasoning: v.Reasoning,
-			ToolCalls: v.ToolCalls,
-		}
-
-	case ToolResponseMessage:
-		return messageDTO{
-			Kind:      kindToolResponse,
-			Responses: v.Responses,
-		}
-
-	case NotificationMessage:
-		return messageDTO{
-			Kind:             kindNotification,
-			Content:          v.Content,
-			NotificationKind: v.Kind,
-		}
-	case SkillMessage:
-		return messageDTO{
-			Kind:   kindSkills,
-			Skills: v.Skills,
-		}
-	case ToolsMessage:
-		return messageDTO{
-			Kind:           kindSkills,
-			AvailableTools: v.Tools,
-		}
-	case ModeSwitchMessage:
-		return messageDTO{
-			Kind: kindModeSwitch,
-			Mode: v.Mode,
-		}
-	case PersonalityMessage:
-		return messageDTO{
-			Kind:        kindPersonality,
-			Personality: v.Personality,
-		}
-
-	default:
-		panic("unknown Message type")
+func DeserialiseMessages(smsgs []SerialisedMessage) []Message {
+	msgs := make([]Message, len(smsgs))
+	for i, sm := range smsgs {
+		msgs[i] = dtoToMessage(sm)
 	}
+	return msgs
 }
 
-func dtoToMessage(d messageDTO) Message {
+func dtoToMessage(d SerialisedMessage) Message {
 	switch d.Kind {
-	case kindSystem:
-		return SystemMessage{Template: d.Content}
-	case kindUser:
-		return UserMessage{Content: d.Content}
-	case kindAgent:
-		return AgentMessage{Content: d.Content}
-	case kindToolCalls:
-		return ToolCallsMessage{
+	case KindSystem:
+		return systemMessage{Template: d.Content}
+	case KindUser:
+		return userMessage{Content: d.Content}
+	case KindAgent:
+		return agentMessage{Content: d.Content}
+	case KindToolCalls:
+		return toolCallsMessage{
 			Reasoning: d.Reasoning,
 			ToolCalls: d.ToolCalls,
 		}
-	case kindToolResponse:
-		return ToolResponseMessage{
+	case KindToolResponse:
+		return toolResponseMessage{
 			Responses: d.Responses,
 		}
-	case kindNotification:
-		return NotificationMessage{Content: d.Content, Kind: d.NotificationKind}
-	case kindSkills:
-		return SkillMessage{Skills: d.Skills}
-	case kindAvailableTools:
-		return ToolsMessage{Tools: d.AvailableTools}
-	case kindModeSwitch:
-		return ModeSwitchMessage{Mode: d.Mode}
-	case kindPersonality:
-		return PersonalityMessage{d.Personality}
+	case KindNotification:
+		return notificationMessage{Notification{Content: d.Content, Kind: d.NotificationKind}}
+	case KindSkills:
+		return skillMessage{Skills: d.Skills}
+	case KindAvailableTools:
+		return toolsMessage{Tools: d.AvailableTools}
+	case KindModeSwitch:
+		return modeSwitchMessage{Mode: d.Mode}
+	case KindPersonality:
+		return personalityMessage{d.Personality}
 	default:
 		panic("unknown message kind")
 	}
+}
+
+type serialisingConverter struct {
+	out []SerialisedMessage
+}
+
+func (c *serialisingConverter) AddSystem(template string) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:    KindSystem,
+		Content: template,
+	})
+}
+
+func (c *serialisingConverter) AddUser(content string) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:    KindUser,
+		Content: content,
+	})
+}
+
+func (c *serialisingConverter) AddAgent(content string) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:    KindAgent,
+		Content: content,
+	})
+}
+
+func (c *serialisingConverter) AddToolCalls(reasoning string, toolCalls []ToolCall) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:      KindToolCalls,
+		Reasoning: reasoning,
+		ToolCalls: toolCalls,
+	})
+}
+
+func (c *serialisingConverter) AddToolResponse(responses []ToolResponse) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:      KindToolResponse,
+		Responses: responses,
+	})
+}
+
+func (c *serialisingConverter) AddModeSwitch(mode AgentMode) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind: KindModeSwitch,
+		Mode: mode,
+	})
+}
+
+func (c *serialisingConverter) AddNotification(kind string, content string) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:             KindNotification,
+		Content:          content,
+		NotificationKind: kind,
+	})
+}
+
+func (c *serialisingConverter) AddPersonality(personality string) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:        KindPersonality,
+		Personality: personality,
+	})
+}
+
+func (c *serialisingConverter) AddSkills(skills []InsertedSkill) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:   KindSkills,
+		Skills: skills,
+	})
+}
+
+func (c *serialisingConverter) AddToolDefs(defs []AvailableToolDefinition) {
+	c.out = append(c.out, SerialisedMessage{
+		Kind:           KindAvailableTools,
+		AvailableTools: defs,
+	})
 }
