@@ -1,74 +1,159 @@
 package react
 
 import (
+	"context"
+
+	"fmt"
 	"iter"
+	"slices"
 )
 
-// Agent defines a Re-Act Agent.
-type Agent interface {
-	// Send a message to the agent, getting its response.
-	// May pass parameters to stream back messages or the response.
-	Send(msg string, opts ...SendMessageOpt) (string, error)
-	// Fetch the entire history state of the agent.
-	Messages() iter.Seq[Message]
+type Agent struct {
+	messages         []Message
+	modelBuilder     AgentModelBuilder
+	tools            []Tool
+	skillSelector    SkillSelector
+	dynamicFragments []Skill
 }
 
-// MessageStreamer defines a callback interface that can be used to listen to new messages that the agent creates.
-type MessageStreamer interface {
-	// Try to send a message, ignoring errors.
-	TrySendMessage(msg Message)
+func (ag *Agent) Send(msg string, opts ...SendMessageOpt) (string, error) {
+	kwargs := getKwargs(opts)
+	streamers := kwargs.Streamers()
+
+	// Update tool message if tools have changed
+	if toolsHaveChanged(ag.messages, ag.tools) {
+		ag.addMessages(streamers, ToolsMessage{
+			Tools: getToolDefs(ag.tools),
+		})
+	}
+
+	// Update notifications
+	for _, msg := range kwargs.notifications {
+		ag.addMessages(streamers, msg)
+	}
+
+	// Add the initial user message
+	ag.addMessages(streamers, UserMessage{msg})
+
+	// Signal we are collecting context and add any relevant fragments
+	if len(ag.dynamicFragments) > 0 {
+		ag.addMessages(streamers, ModeSwitchMessage{ModeCollectContext})
+		nextSkills, err := ag.getNextSelectedSkills()
+		if err != nil {
+			return "", err
+		}
+		ag.addMessages(streamers, SkillMessage{nextSkills})
+	}
+
+	ag.addMessages(streamers, ModeSwitchMessage{ModeReasonAct})
+
+	// React loop
+	for {
+		// Ask agent for any new tool calls and break if there are no calls
+		toolCalls, err := ag.answerReAct()
+		if err != nil {
+			return "", err
+		}
+		ag.addMessages(streamers, toolCalls)
+		if len(toolCalls.ToolCalls) == 0 {
+			break
+		}
+		// Execute tool calls
+		toolResults := ag.executeToolCalls(toolCalls.ToolCalls)
+		ag.addMessages(streamers, ToolResponseMessage{toolResults})
+	}
+
+	// Set the agent to final answer mode and get the response
+	ag.addMessages(streamers, ModeSwitchMessage{ModeAnswerUser})
+	finalResp, err := ag.answerFinalResponse(streamers)
+	if err != nil {
+		return "", err
+	}
+	ag.addMessages(streamers, AgentMessage{finalResp})
+	return finalResp, nil
 }
 
-// TextStreamer defines a callback interface that can be used to listen to text being streamed back from the final agent response.
-type TextStreamer interface {
-	// Try to send a response text chunk back, ignoring errors.
-	TrySendTextChunk(chunk string)
+func (ag *Agent) Messages() iter.Seq[Message] {
+	return slices.Values(ag.messages)
 }
 
-type SendMessageOpt func(*streamers)
+func (ag *Agent) getNextSelectedSkills() ([]InsertedSkill, error) {
+	// Find any carry forward skills
+	prevSkills := getLastInsertedSkills(ag.messages)
+	skillsToPersist := make([]InsertedSkill, 0)
+	for _, f := range prevSkills {
+		if f.NowRemainFor > 0 {
+			skillsToPersist = append(skillsToPersist, InsertedSkill{f.Skill, f.NowRemainFor - 1})
+		}
+	}
+	// Select new skills
+	newSkills, err := ag.skillSelector.SelectSkills(ag.dynamicFragments, ag.messages)
+	if err != nil {
+		return nil, err
+	}
+	skillsToInsert := make([]InsertedSkill, len(newSkills))
+	for i, s := range newSkills {
+		skillsToInsert[i] = InsertedSkill{s, s.RemainFor}
+	}
+	return append(skillsToPersist, skillsToInsert...), nil
+}
 
-// In addition to other message streamers, use the provided streamer.
-func WithMessageStreamer(streamer MessageStreamer) SendMessageOpt {
-	return func(s *streamers) {
-		s.msgStreamers = append(s.msgStreamers, streamer)
+func (ag *Agent) answerReAct() (ToolCallsMessage, error) {
+	model := ag.modelBuilder.BuildAgentModel(reasonResponse{}, nil, nil)
+	pipeline := getAgentReActPipeline(model)
+	result, _, err := pipeline.Call(context.Background(), ag.messages)
+	if err != nil {
+		return ToolCallsMessage{}, err
+	}
+	return toolCallsMessageFromResponse(result), nil
+}
+
+func (ag *Agent) answerFinalResponse(streamer TextStreamer) (string, error) {
+	model := ag.modelBuilder.BuildAgentModel(nil, nil, streamer.TrySendTextChunk)
+	pipeline := getAgentFinalAnswerPipeline(model)
+	result, _, err := pipeline.Call(context.Background(), ag.messages)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+func (ag *Agent) addMessages(msgStreamer MessageStreamer, msgs ...Message) {
+	ag.messages = append(ag.messages, msgs...)
+	if msgStreamer != nil {
+		for _, msg := range msgs {
+			msgStreamer.TrySendMessage(msg)
+		}
 	}
 }
 
-// In addition to other response streamers, use the provided streamer.
-func WithResponseStreamer(streamer TextStreamer) SendMessageOpt {
-	return func(s *streamers) {
-		s.respStreamers = append(s.respStreamers, streamer)
+func (ag *Agent) executeToolCalls(calls []ToolCall) []ToolResponse {
+	results := make([]ToolResponse, 0)
+	for _, call := range calls {
+		tool := ag.findToolByName(call.ToolName)
+		if tool == nil {
+			results = append(results, ToolResponse{fmt.Sprintf("Could not find tool. with name '%s'", call.ToolName)})
+			continue
+		}
+		args := make(map[string]any)
+		for _, arg := range call.ToolArgs {
+			args[arg.ArgName] = arg.ArgValue
+		}
+		result, err := tool.Call(args)
+		if err != nil {
+			results = append(results, ToolResponse{fmt.Sprintf("There was an error calling the tool: %v", err)})
+			continue
+		}
+		results = append(results, ToolResponse{result})
 	}
+	return results
 }
 
-func WithNotifications(notifications ...NotificationMessage) SendMessageOpt {
-	return func(s *streamers) {
-		s.notifications = append(s.notifications, notifications...)
+func (ag *Agent) findToolByName(toolName string) Tool {
+	for _, t := range ag.tools {
+		if t.Name() == toolName {
+			return t
+		}
 	}
-}
-
-type streamers struct {
-	msgStreamers  []MessageStreamer
-	respStreamers []TextStreamer
-	notifications []NotificationMessage
-}
-
-func getStreamers(opts []SendMessageOpt) streamers {
-	s := streamers{}
-	for _, opt := range opts {
-		opt(&s)
-	}
-	return s
-}
-
-func (s streamers) TrySendMessage(msg Message) {
-	for _, msgStreamer := range s.msgStreamers {
-		msgStreamer.TrySendMessage(msg)
-	}
-}
-
-func (s streamers) TrySendTextChunk(chunk string) {
-	for _, msgStreamer := range s.respStreamers {
-		msgStreamer.TrySendTextChunk(chunk)
-	}
+	return nil
 }

@@ -14,9 +14,10 @@ func (NotificationMessage) message() {}
 func (SkillMessage) message()        {}
 func (ToolsMessage) message()        {}
 func (ModeSwitchMessage) message()   {}
+func (PersonalityMessage) message()  {}
 
 type SystemMessage struct {
-	Content string
+	Template string
 }
 
 type UserMessage struct {
@@ -45,8 +46,12 @@ type NotificationMessage struct {
 	Content string
 }
 
+type PersonalityMessage struct {
+	Personality string
+}
+
 type SkillMessage struct {
-	Skills []Skill
+	Skills []InsertedSkill
 }
 
 type ToolsMessage struct {
@@ -65,6 +70,13 @@ type Skill struct {
 	When string
 	// The content that is not seen by the selector but is seen by the agent when chosen.
 	Content string
+	// How many turns after the turn it is inserted will the skill remain in context
+	RemainFor int
+}
+
+type InsertedSkill struct {
+	Skill
+	NowRemainFor int
 }
 
 func (f Skill) IsConditional() bool { return f.When != "" }

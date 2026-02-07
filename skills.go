@@ -3,7 +3,6 @@ package react
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/JoshPattman/jpf"
@@ -15,14 +14,11 @@ type SkillSelector interface {
 	SelectSkills([]Skill, []Message) ([]Skill, error)
 }
 
-func NewSkillSelector(modelBuilder FragmentSelectorModelBuilder, dontRepeatN int) SkillSelector {
+func NewSkillSelector(modelBuilder FragmentSelectorModelBuilder) SkillSelector {
 	if modelBuilder == nil {
 		return &noSkillSelector{}
 	}
 	var selec SkillSelector = &conversationLLMSkillSelector{modelBuilder}
-	if dontRepeatN > 0 {
-		selec = &dontRepeatInNFragmentSelector{dontRepeatN, selec}
-	}
 	return selec
 }
 
@@ -111,21 +107,13 @@ func (selector *conversationLLMSkillSelector) BuildInputMessages(input conversat
 	}, nil
 }
 
-type dontRepeatInNFragmentSelector struct {
-	n        int
-	selector SkillSelector
-}
-
-func (selector *dontRepeatInNFragmentSelector) SelectSkills(frags []Skill, messages []Message) ([]Skill, error) {
-	allowedSelectFrags := slices.Clone(frags)
-	for i := len(messages) - 1; i >= 0 && len(messages)-1-i < selector.n; i-- {
-		msg, ok := messages[i].(SkillMessage)
-		if !ok {
-			continue
-		}
-		for _, f := range msg.Skills {
-			allowedSelectFrags = slices.DeleteFunc(allowedSelectFrags, func(x Skill) bool { return x == f })
+func getDynamicAndPersistent(fragments []Skill) (dynamic, persistent []Skill) {
+	for _, f := range fragments {
+		if f.IsConditional() {
+			dynamic = append(dynamic, f)
+		} else {
+			persistent = append(persistent, f)
 		}
 	}
-	return selector.selector.SelectSkills(allowedSelectFrags, messages)
+	return dynamic, persistent
 }

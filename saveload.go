@@ -17,6 +17,7 @@ const (
 	kindSkills         messageKind = "skills"
 	kindAvailableTools messageKind = "available_tools"
 	kindModeSwitch     messageKind = "mode_switch"
+	kindPersonality    messageKind = "personality"
 )
 
 // EncodeMessages into a json format on the writer.
@@ -52,9 +53,10 @@ type messageDTO struct {
 	ToolCalls []ToolCall     `json:"tool_calls,omitempty"`
 	Responses []ToolResponse `json:"responses,omitempty"`
 
-	Skills         []Skill                   `json:"skills,omitempty"`
+	Skills         []InsertedSkill           `json:"skills,omitempty"`
 	AvailableTools []AvailableToolDefinition `json:"available_tools,omitempty"`
 	Mode           AgentMode                 `json:"mode,omitempty"`
+	Personality    string                    `json:"personality,omitempty"`
 }
 
 func messageToDTO(m Message) messageDTO {
@@ -62,7 +64,7 @@ func messageToDTO(m Message) messageDTO {
 	case SystemMessage:
 		return messageDTO{
 			Kind:    kindSystem,
-			Content: v.Content,
+			Content: v.Template,
 		}
 
 	case UserMessage:
@@ -111,6 +113,11 @@ func messageToDTO(m Message) messageDTO {
 			Kind: kindModeSwitch,
 			Mode: v.Mode,
 		}
+	case PersonalityMessage:
+		return messageDTO{
+			Kind:        kindPersonality,
+			Personality: v.Personality,
+		}
 
 	default:
 		panic("unknown Message type")
@@ -120,7 +127,7 @@ func messageToDTO(m Message) messageDTO {
 func dtoToMessage(d messageDTO) Message {
 	switch d.Kind {
 	case kindSystem:
-		return SystemMessage{Content: d.Content}
+		return SystemMessage{Template: d.Content}
 	case kindUser:
 		return UserMessage{Content: d.Content}
 	case kindAgent:
@@ -142,6 +149,8 @@ func dtoToMessage(d messageDTO) Message {
 		return ToolsMessage{Tools: d.AvailableTools}
 	case kindModeSwitch:
 		return ModeSwitchMessage{Mode: d.Mode}
+	case kindPersonality:
+		return PersonalityMessage{d.Personality}
 	default:
 		panic("unknown message kind")
 	}

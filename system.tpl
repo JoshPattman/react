@@ -4,3 +4,13 @@
   - When in answer mode, you will respond with just the text of your answer, with no formatting or encoding. All of the text will be shown to the user.
 {{if .Personality}}- {{.Personality}}
 {{end}}
+
+{{if .Skills}}
+- Active Skills (here are some task-specific instructions. Not all instructions here will be relevant to a given task, do not follow them if not relevent):
+{{range .Skills}}
+  - Skill: '{{.Key}}'{{if .When}} ({{.When}}){{end}}
+{{.Content}}
+
+
+{{end}}
+{{end}}

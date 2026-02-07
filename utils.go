@@ -39,3 +39,25 @@ func toolsHaveChanged(history []Message, tools []Tool) bool {
 	}
 	return false
 }
+
+func getLastInsertedSkills(msgs []Message) []InsertedSkill {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		msg, ok := msgs[i].(SkillMessage)
+		if !ok {
+			continue
+		}
+		return slices.Clone(msg.Skills)
+	}
+	return nil
+}
+
+func getLastPersonality(msgs []Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		msg, ok := msgs[i].(PersonalityMessage)
+		if !ok {
+			continue
+		}
+		return msg.Personality
+	}
+	return ""
+}
