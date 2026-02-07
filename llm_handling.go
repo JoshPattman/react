@@ -120,12 +120,12 @@ func (c *jpfMessageConverter) Messages() []jpf.Message {
 		c.personality,
 		c.skills,
 	})
-	return []jpf.Message{
+	return append([]jpf.Message{
 		{
 			Role:    jpf.SystemRole,
 			Content: prompt,
 		},
-	}
+	}, c.activeMessages...)
 }
 
 func (conv *jpfMessageConverter) AddSystem(template string) {

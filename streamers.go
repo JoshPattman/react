@@ -11,3 +11,20 @@ type TextStreamer interface {
 	// Try to send a response text chunk back, ignoring errors.
 	TrySendTextChunk(chunk string)
 }
+
+type multiStreamers struct {
+	msgStreamers  []MessageStreamer
+	respStreamers []TextStreamer
+}
+
+func (s multiStreamers) TrySendMessage(msg Message) {
+	for _, msgStreamer := range s.msgStreamers {
+		msgStreamer.TrySendMessage(msg)
+	}
+}
+
+func (s multiStreamers) TrySendTextChunk(chunk string) {
+	for _, msgStreamer := range s.respStreamers {
+		msgStreamer.TrySendTextChunk(chunk)
+	}
+}

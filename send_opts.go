@@ -36,23 +36,6 @@ func getKwargs(opts []SendMessageOpt) sendMessageKwargs {
 	return s
 }
 
-func (kw sendMessageKwargs) Streamers() sendMessageStreamers {
-	return sendMessageStreamers{kw.msgStreamers, kw.respStreamers}
-}
-
-type sendMessageStreamers struct {
-	msgStreamers  []MessageStreamer
-	respStreamers []TextStreamer
-}
-
-func (s sendMessageStreamers) TrySendMessage(msg Message) {
-	for _, msgStreamer := range s.msgStreamers {
-		msgStreamer.TrySendMessage(msg)
-	}
-}
-
-func (s sendMessageStreamers) TrySendTextChunk(chunk string) {
-	for _, msgStreamer := range s.respStreamers {
-		msgStreamer.TrySendTextChunk(chunk)
-	}
+func (kw sendMessageKwargs) Streamers() multiStreamers {
+	return multiStreamers{kw.msgStreamers, kw.respStreamers}
 }
