@@ -43,22 +43,22 @@ func toolsHaveChanged(history []Message, tools []Tool) bool {
 }
 
 // Compose on this to get no-op behaviour for all message types
-type BaseMessageConverter struct{}
+type baseMessageConverter struct{}
 
-func (*BaseMessageConverter) AddSystem(template string)                           {}
-func (*BaseMessageConverter) AddUser(content string)                              {}
-func (*BaseMessageConverter) AddAgent(content string)                             {}
-func (*BaseMessageConverter) AddToolCalls(reasoning string, toolCalls []ToolCall) {}
-func (*BaseMessageConverter) AddToolResponse(responses []ToolResponse)            {}
-func (*BaseMessageConverter) AddModeSwitch(mode AgentMode)                        {}
-func (*BaseMessageConverter) AddNotification(kind string, content string)         {}
-func (*BaseMessageConverter) AddPersonality(personality string)                   {}
-func (*BaseMessageConverter) AddSkills(skills []InsertedSkill)                    {}
-func (*BaseMessageConverter) AddToolDefs(defs []AvailableToolDefinition)          {}
+func (*baseMessageConverter) AddSystem(template string)                           {}
+func (*baseMessageConverter) AddUser(content string)                              {}
+func (*baseMessageConverter) AddAgent(content string)                             {}
+func (*baseMessageConverter) AddToolCalls(reasoning string, toolCalls []ToolCall) {}
+func (*baseMessageConverter) AddToolResponse(responses []ToolResponse)            {}
+func (*baseMessageConverter) AddModeSwitch(mode AgentMode)                        {}
+func (*baseMessageConverter) AddNotification(kind string, content string)         {}
+func (*baseMessageConverter) AddPersonality(personality string)                   {}
+func (*baseMessageConverter) AddSkills(skills []InsertedSkill)                    {}
+func (*baseMessageConverter) AddToolDefs(defs []AvailableToolDefinition)          {}
 
 // An encoder that tracks current state of the agent without actually noting down messages
 type currentStateMessageConverter struct {
-	BaseMessageConverter
+	baseMessageConverter
 	systemTemplate string
 	personality    string
 	skills         []InsertedSkill
@@ -84,7 +84,7 @@ func (conv *currentStateMessageConverter) AddToolDefs(defs []AvailableToolDefini
 
 func getCurrentState(msgs []Message) *currentStateMessageConverter {
 	enc := &currentStateMessageConverter{}
-	ConvertMessages(enc, msgs)
+	convertMessages(enc, msgs)
 	return enc
 }
 

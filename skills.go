@@ -67,7 +67,7 @@ func (selector *conversationLLMSkillSelector) SelectSkills(frags []Skill, messag
 
 func (selector *conversationLLMSkillSelector) BuildInputMessages(input conversationLLMSkillSelectorInput) ([]jpf.Message, error) {
 	enc := &xmlMessageConverter{}
-	ConvertMessages(enc, input.Messages)
+	convertMessages(enc, input.Messages)
 	conv := enc.lines
 	if len(conv) > 10 {
 		conv = conv[len(conv)-10:]
@@ -103,7 +103,7 @@ func (selector *conversationLLMSkillSelector) BuildInputMessages(input conversat
 
 // An encoder that converts user and assistant messages to xml lines
 type xmlMessageConverter struct {
-	BaseMessageConverter
+	baseMessageConverter
 	lines []string
 }
 

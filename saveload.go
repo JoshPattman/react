@@ -30,7 +30,7 @@ type SerialisedMessage struct {
 
 func SerialiseMessages(msgs []Message) []SerialisedMessage {
 	converter := &serialisingConverter{}
-	ConvertMessages(converter, msgs)
+	convertMessages(converter, msgs)
 	return converter.out
 }
 

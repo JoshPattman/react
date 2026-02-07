@@ -55,7 +55,7 @@ type messagesEncoder struct{}
 
 func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, error) {
 	converter := &jpfMessageConverter{}
-	ConvertMessages(converter, msgs)
+	convertMessages(converter, msgs)
 	return converter.Messages(), nil
 }
 
