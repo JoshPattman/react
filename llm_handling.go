@@ -121,6 +121,8 @@ func (m *messagesEncoder) BuildInputMessages(msgs []Message) ([]jpf.Message, err
 			}
 		case SkillMessage:
 			dontMessage = true // Skills are handled by the system prompt
+		case PersonalityMessage:
+			dontMessage = true
 		case ToolsMessage:
 			if len(msg.Tools) == 0 {
 				resultMsg = jpf.Message{
